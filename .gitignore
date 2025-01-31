@@ -1,6 +1,9 @@
 #virtual env
 *venv/
 
+#api key
+*.enc
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

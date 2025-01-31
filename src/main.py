@@ -1,4 +1,5 @@
 import sys
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import requests
@@ -6,6 +7,10 @@ from io import StringIO
 import tkinter as tk
 from tkinter import ttk, messagebox
 import numpy as np
+import base64
+import hashlib
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
 
 try:
     import talib
@@ -14,7 +19,29 @@ except ModuleNotFoundError:
     print("Warning: TA-Lib is not installed. Some features may not work.")
     TALIB_AVAILABLE = False
 
-ALPHA_VANTAGE_API_KEY = ""  # Replace with your Alpha Vantage API key
+def encrypt_key(key, filename="api_key.enc", password="your_strong_password"):
+    key_bytes = key.encode()
+    password_bytes = hashlib.sha256(password.encode()).digest()
+    cipher = AES.new(password_bytes, AES.MODE_CBC)
+    ciphertext = cipher.encrypt(pad(key_bytes, AES.block_size))
+    with open(filename, "wb") as f:
+        f.write(cipher.iv + ciphertext)
+
+def decrypt_key(filename="api_key.enc", password="your_strong_password"):
+    password_bytes = hashlib.sha256(password.encode()).digest()
+    with open(filename, "rb") as f:
+        iv = f.read(16)
+        ciphertext = f.read()
+    cipher = AES.new(password_bytes, AES.MODE_CBC, iv)
+    decrypted_key = unpad(cipher.decrypt(ciphertext), AES.block_size).decode()
+    return decrypted_key
+
+API_KEY_FILE = "api_key.enc"
+if os.path.exists(API_KEY_FILE):
+    ALPHA_VANTAGE_API_KEY = decrypt_key(API_KEY_FILE)
+else:
+    ALPHA_VANTAGE_API_KEY = input("Enter your Alpha Vantage API Key: ")
+    encrypt_key(ALPHA_VANTAGE_API_KEY, API_KEY_FILE)
 
 AVAILABLE_STOCKS = ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA"]  # Sample stock list
 
