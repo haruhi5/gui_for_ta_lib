@@ -1,0 +1,8 @@
+pandas
+matplotlib
+requests
+pyproject-toml
+PyQt6
+tk
+pycryptodome
+TA-Lib
