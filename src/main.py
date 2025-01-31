@@ -53,9 +53,10 @@ TIME_RANGE_OPTIONS = {
     "6 Months": 180,
     "1 Year": 365,
     "5 Years": 1825,
-    "All Time": None
+    "10 Years": 18250
 }
 
+# add ta-lib api here
 INDICATOR_DESCRIPTIONS = {
     "SMA": "Simple Moving Average - Averages price over a set period.",
     "EMA": "Exponential Moving Average - A weighted moving average giving more importance to recent prices.",
@@ -66,6 +67,7 @@ INDICATOR_DESCRIPTIONS = {
     "ATR": "Average True Range - A volatility indicator.",
     "HT_SINE": "Hilbert Transform Sine Wave - Identifies market cycles.",
     "HT_PHASOR": "Hilbert Transform Phasor Components - Identifies phase components of cycles.",
+    "HT_TRENDMODE": "Hilbert Transform - Trend vs Cycle Mode",
     "TSF": "Time Series Forecast - Forecasts the next value in a time series."
 }
 
@@ -123,7 +125,7 @@ class TaLibGUI:
             response = requests.get(url)
             response.raise_for_status()
             
-            self.stock_data = pd.read_csv(StringIO(response.text), parse_dates=["timestamp"], index_col="timestamp")
+            self.stock_data = pd.read_csv(StringIO(response.text), parse_dates=["timestamp"], index_col="timestamp")            
             self.stock_data = self.stock_data[::-1]
             
             if self.stock_data.empty:
@@ -156,22 +158,51 @@ class TaLibGUI:
         
         try:
             close_prices = filtered_data["close"].dropna()
+            # call ta-lib api
             result = getattr(talib, indicator)(close_prices)
+            beta = pd.Series(talib.BETA(filtered_data["high"], filtered_data["low"], timeperiod=5), index=close_prices.index)
+            correl = pd.Series(talib.CORREL(filtered_data["high"], filtered_data["low"], timeperiod=5), index=close_prices.index)
+            stddev = pd.Series(talib.STDDEV(close_prices, timeperiod=5), index=close_prices.index)
+            var = pd.Series(talib.VAR(close_prices, timeperiod=5), index=close_prices.index)
             
             if indicator == "TSF":
-                forecast_dates = [close_prices.index[-1] + pd.Timedelta(days=i) for i in range(1, 3)]
+                forecast_dates = [close_prices.index[-1] + pd.Timedelta(days=i) for i in range(1, 100)]
                 forecast_values = [result.iloc[-1], result.iloc[-1]]
-                
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(close_prices.index, close_prices, label="Close Price", color="blue")
-            ax.plot(result.index, result, label=indicator, color="red")
+            
+            fig, ax = plt.subplots(3, 2, figsize=(10, 12))
+            ax[0].plot(close_prices.index, close_prices, label="Close Price", color="blue")
+            ax[0].set_title("Stock Close Price")
+            ax[0].grid(True)
+            ax[0].legend()
+            
+            ax[1].plot(result.index, result, label=indicator, color="red")
+            ax[1].set_title(indicator)
+            ax[1].grid(True)
+            ax[1].legend()
+            
+            ax[2].plot(beta.index, beta, label="Beta Coefficient", color="green")
+            ax[2].set_title("Beta Coefficient")
+            ax[2].grid(True)
+            ax[2].legend()
+            
+            ax[3].plot(correl.index, correl, label="Correlation", color="purple")
+            ax[3].set_title("Correlation")
+            ax[3].grid(True)
+            ax[3].legend()
+            
+            ax[4].plot(stddev.index, stddev, label="Std Dev", color="orange")
+            ax[4].set_title("Standard Deviation")
+            ax[4].grid(True)
+            ax[4].legend()
+            
+            ax[5].plot(var.index, var, label="Variance", color="brown")  # FIXED PLOTTING
+            ax[5].set_title("Variance")
+            ax[5].grid(True)
+            ax[5].legend()
             
             if indicator == "TSF":
-                ax.plot(forecast_dates, forecast_values, label="2-day Forecast", linestyle='dashed', color='green')
+                ax[1].plot(forecast_dates, forecast_values, label="2-day Forecast", linestyle='dashed', color='green')
             
-            ax.legend()
-            ax.set_title(f"{indicator} for {self.symbol_var.get()} ({self.range_var.get()})")
-            ax.grid(True)
             plt.show()
         except Exception as e:
             messagebox.showerror("Error", str(e))
