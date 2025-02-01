@@ -75,6 +75,7 @@ class TaLibGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("TA-Lib Stock Analysis")
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         
         # Stock Symbol Selection
         self.symbol_label = ttk.Label(root, text="Select Stock Symbol:")
@@ -83,9 +84,13 @@ class TaLibGUI:
         self.symbol_var = tk.StringVar()
         self.symbol_menu = ttk.Combobox(root, textvariable=self.symbol_var, values=AVAILABLE_STOCKS)
         self.symbol_menu.grid(row=0, column=1, padx=10, pady=5)
+
+        self.use_stored_var = tk.BooleanVar()
+        self.use_stored_check = ttk.Checkbutton(root, text="Use Stored Data", variable=self.use_stored_var)
+        self.use_stored_check.grid(row=0, column=2, padx=10, pady=5)
         
         self.fetch_button = ttk.Button(root, text="Fetch Data", command=self.fetch_stock_data)
-        self.fetch_button.grid(row=0, column=2, padx=10, pady=5)
+        self.fetch_button.grid(row=0, column=3, padx=10, pady=5)
         
         # Time Range Selection
         self.range_label = ttk.Label(root, text="Select Time Range:")
@@ -113,27 +118,32 @@ class TaLibGUI:
         self.compute_button.grid(row=2, column=2, padx=10, pady=5)
         
         self.stock_data = None
+        self.fig, self.ax = None, None
+        self.vlines = []
+        self.data_file = os.path.join(os.path.dirname(__file__), "../data/fetched_data.csv")
+        print(self.data_file)
         self.populate_indicators()
     
     def fetch_stock_data(self):
+        if self.use_stored_var.get() and os.path.exists(self.data_file):
+            self.stock_data = pd.read_csv(self.data_file, parse_dates=["timestamp"], index_col="timestamp")
+            messagebox.showinfo("Success", "Loaded stored data successfully.")
+            return
+
         symbol = self.symbol_var.get().strip().upper()
         if not symbol:
             messagebox.showerror("Error", "Please select a stock symbol.")
             return
+
         try:
             url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}&outputsize=full&datatype=csv"
             response = requests.get(url)
             response.raise_for_status()
-            
-            self.stock_data = pd.read_csv(StringIO(response.text), parse_dates=["timestamp"], index_col="timestamp")            
-            self.stock_data = self.stock_data[::-1]
-            
-            if self.stock_data.empty:
-                messagebox.showerror("Error", "No data found for this symbol.")
-            else:
-                messagebox.showinfo("Success", f"Successfully fetched data for {symbol}")
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+            self.stock_data = pd.read_csv(StringIO(response.text), parse_dates=["timestamp"], index_col="timestamp")
+            self.stock_data.to_csv("fetched_data.csv")  # Store fetched data
+            messagebox.showinfo("Success", f"Successfully fetched and stored data for {symbol}")
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Error", f"Failed to fetch data: {e}")
     
     def populate_indicators(self):
         self.indicator_menu["values"] = sorted(INDICATOR_DESCRIPTIONS.keys())
@@ -160,51 +170,51 @@ class TaLibGUI:
             close_prices = filtered_data["close"].dropna()
 
             # Convert NumPy array to Pandas Series for plotting
-            result = pd.Series(getattr(talib, indicator)(close_prices), index=close_prices.index)
-            beta = pd.Series(talib.BETA(filtered_data["high"], filtered_data["low"], timeperiod=5), index=close_prices.index)
-            correl = pd.Series(talib.CORREL(filtered_data["high"], filtered_data["low"], timeperiod=5), index=close_prices.index)
-            stddev = pd.Series(talib.STDDEV(close_prices, timeperiod=5), index=close_prices.index)
-            var = pd.Series(talib.VAR(close_prices, timeperiod=5), index=close_prices.index)
+            plot_tags = {
+                "Close Price": filtered_data["close"].dropna(),
+                indicator: pd.Series(getattr(talib, indicator)(close_prices), index=close_prices.index),
+                "Beta Coefficient": pd.Series(talib.BETA(filtered_data["high"], filtered_data["low"], timeperiod=5), index=close_prices.index),
+                "Correlation": pd.Series(talib.CORREL(filtered_data["high"], filtered_data["low"], timeperiod=5), index=close_prices.index),
+                "Standard Deviation":pd.Series(talib.STDDEV(close_prices, timeperiod=5), index=close_prices.index),
+                "Variance":pd.Series(talib.VAR(close_prices, timeperiod=5), index=close_prices.index),
+            }
 
-            fig, ax = plt.subplots(3, 2, figsize=(10, 12))
+            # if indicator == "TSF":
+            #     forecast_dates = [close_prices.index[-1] + pd.Timedelta(days=i) for i in range(1, 100)]
+            #     forecast_values = #TODO
 
-            ax[0, 0].plot(close_prices.index, close_prices, label="Close Price", color="blue")
-            ax[0, 0].set_title("Stock Close Price")
-            ax[0, 0].grid(True)
-            ax[0, 0].legend()
+            self.fig, self.ax = plt.subplots(3, 2, figsize=(10, 12))
 
-            ax[0, 1].plot(result.index, result, label=indicator, color="red")
-            ax[0, 1].set_title(indicator)
-            ax[0, 1].grid(True)
-            ax[0, 1].legend()
-
-            ax[1, 0].plot(beta.index, beta, label="Beta Coefficient", color="green")
-            ax[1, 0].set_title("Beta Coefficient")
-            ax[1, 0].grid(True)
-            ax[1, 0].legend()
-
-            ax[1, 1].plot(correl.index, correl, label="Correlation", color="purple")
-            ax[1, 1].set_title("Correlation")
-            ax[1, 1].grid(True)
-            ax[1, 1].legend()
-
-            ax[2, 0].plot(stddev.index, stddev, label="Standard Deviation", color="orange")
-            ax[2, 0].set_title("Standard Deviation")
-            ax[2, 0].grid(True)
-            ax[2, 0].legend()
-
-            ax[2, 1].plot(var.index, var, label="Variance", color="brown")
-            ax[2, 1].set_title("Variance")
-            ax[2, 1].grid(True)
-            ax[2, 1].legend()
+            for (title, data), ax in zip(plot_tags.items(), self.ax.flatten()):
+                ax.plot(data.index, data, label=title, color=np.random.rand(3,))
+                ax.set_title(title)
+                ax.legend()
+                ax.grid(True)
+                # if title == "TSF":
+                #     ax.plot(forecast_dates, forecast_values, label="100-day Forecast", linestyle='dashed', color='green')
 
             plt.tight_layout()
+            self.fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
             plt.show()
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
+    def on_mouse_move(self, event):
+        if event.inaxes is None:
+            return
+        
+        for vline in self.vlines:
+            vline.remove()
+        
+        self.vlines = [ax.axvline(event.xdata, color='red', linestyle='dashed') for ax in self.ax.flatten()]
+        event.canvas.draw()
+
+    def on_close(self):
+        self.root.destroy()
+        sys.exit()
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = TaLibGUI(root)
     root.mainloop()
+    exit
