@@ -147,65 +147,62 @@ class TaLibGUI:
         if self.stock_data is None:
             messagebox.showerror("Error", "Please fetch stock data first.")
             return
-        
+
         indicator = self.indicator_var.get()
         if not indicator:
             messagebox.showerror("Error", "Please select an indicator.")
             return
-        
+
         selected_range = TIME_RANGE_OPTIONS[self.range_var.get()]
         filtered_data = self.stock_data if selected_range is None else self.stock_data.tail(selected_range)
-        
+
         try:
             close_prices = filtered_data["close"].dropna()
-            # call ta-lib api
-            result = getattr(talib, indicator)(close_prices)
+
+            # Convert NumPy array to Pandas Series for plotting
+            result = pd.Series(getattr(talib, indicator)(close_prices), index=close_prices.index)
             beta = pd.Series(talib.BETA(filtered_data["high"], filtered_data["low"], timeperiod=5), index=close_prices.index)
             correl = pd.Series(talib.CORREL(filtered_data["high"], filtered_data["low"], timeperiod=5), index=close_prices.index)
             stddev = pd.Series(talib.STDDEV(close_prices, timeperiod=5), index=close_prices.index)
             var = pd.Series(talib.VAR(close_prices, timeperiod=5), index=close_prices.index)
-            
-            if indicator == "TSF":
-                forecast_dates = [close_prices.index[-1] + pd.Timedelta(days=i) for i in range(1, 100)]
-                forecast_values = [result.iloc[-1], result.iloc[-1]]
-            
+
             fig, ax = plt.subplots(3, 2, figsize=(10, 12))
-            ax[0].plot(close_prices.index, close_prices, label="Close Price", color="blue")
-            ax[0].set_title("Stock Close Price")
-            ax[0].grid(True)
-            ax[0].legend()
-            
-            ax[1].plot(result.index, result, label=indicator, color="red")
-            ax[1].set_title(indicator)
-            ax[1].grid(True)
-            ax[1].legend()
-            
-            ax[2].plot(beta.index, beta, label="Beta Coefficient", color="green")
-            ax[2].set_title("Beta Coefficient")
-            ax[2].grid(True)
-            ax[2].legend()
-            
-            ax[3].plot(correl.index, correl, label="Correlation", color="purple")
-            ax[3].set_title("Correlation")
-            ax[3].grid(True)
-            ax[3].legend()
-            
-            ax[4].plot(stddev.index, stddev, label="Std Dev", color="orange")
-            ax[4].set_title("Standard Deviation")
-            ax[4].grid(True)
-            ax[4].legend()
-            
-            ax[5].plot(var.index, var, label="Variance", color="brown")  # FIXED PLOTTING
-            ax[5].set_title("Variance")
-            ax[5].grid(True)
-            ax[5].legend()
-            
-            if indicator == "TSF":
-                ax[1].plot(forecast_dates, forecast_values, label="2-day Forecast", linestyle='dashed', color='green')
-            
+
+            ax[0, 0].plot(close_prices.index, close_prices, label="Close Price", color="blue")
+            ax[0, 0].set_title("Stock Close Price")
+            ax[0, 0].grid(True)
+            ax[0, 0].legend()
+
+            ax[0, 1].plot(result.index, result, label=indicator, color="red")
+            ax[0, 1].set_title(indicator)
+            ax[0, 1].grid(True)
+            ax[0, 1].legend()
+
+            ax[1, 0].plot(beta.index, beta, label="Beta Coefficient", color="green")
+            ax[1, 0].set_title("Beta Coefficient")
+            ax[1, 0].grid(True)
+            ax[1, 0].legend()
+
+            ax[1, 1].plot(correl.index, correl, label="Correlation", color="purple")
+            ax[1, 1].set_title("Correlation")
+            ax[1, 1].grid(True)
+            ax[1, 1].legend()
+
+            ax[2, 0].plot(stddev.index, stddev, label="Standard Deviation", color="orange")
+            ax[2, 0].set_title("Standard Deviation")
+            ax[2, 0].grid(True)
+            ax[2, 0].legend()
+
+            ax[2, 1].plot(var.index, var, label="Variance", color="brown")
+            ax[2, 1].set_title("Variance")
+            ax[2, 1].grid(True)
+            ax[2, 1].legend()
+
+            plt.tight_layout()
             plt.show()
         except Exception as e:
             messagebox.showerror("Error", str(e))
+
 
 if __name__ == "__main__":
     root = tk.Tk()
