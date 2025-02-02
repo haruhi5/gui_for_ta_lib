@@ -11,6 +11,7 @@ import base64
 import hashlib
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
+import openai
 
 try:
     import talib
@@ -37,6 +38,9 @@ def decrypt_key(filename="api_key.enc", password="your_strong_password"):
     return decrypted_key
 
 API_KEY_FILE = "api_key.enc"
+# Set your OpenAI API Key
+OPENAI_API_KEY = "your_openai_api_key"
+
 if os.path.exists(API_KEY_FILE):
     ALPHA_VANTAGE_API_KEY = decrypt_key(API_KEY_FILE)
 else:
@@ -117,6 +121,9 @@ class TaLibGUI:
         self.compute_button = ttk.Button(root, text="Compute Indicator", command=self.compute_indicator)
         self.compute_button.grid(row=2, column=2, padx=10, pady=5)
         
+        self.analysis_label = tk.Label(root, text="Analysis will appear here", wraplength=600, justify="left")
+        self.analysis_label.grid(row=2, column=3, columnspan=4, padx=10, pady=5)
+        
         self.stock_data = None
         self.fig, self.ax = None, None
         self.vlines = []
@@ -140,7 +147,7 @@ class TaLibGUI:
             response = requests.get(url)
             response.raise_for_status()
             self.stock_data = pd.read_csv(StringIO(response.text), parse_dates=["timestamp"], index_col="timestamp")
-            self.stock_data.to_csv("fetched_data.csv")  # Store fetched data
+            self.stock_data.to_csv(self.data_file)  # Store fetched data
             messagebox.showinfo("Success", f"Successfully fetched and stored data for {symbol}")
         except requests.exceptions.RequestException as e:
             messagebox.showerror("Error", f"Failed to fetch data: {e}")
@@ -195,7 +202,9 @@ class TaLibGUI:
 
             plt.tight_layout()
             self.fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+            plt.savefig("plot.png")
             plt.show()
+            self.analyze_plot()
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
@@ -208,6 +217,27 @@ class TaLibGUI:
         
         self.vlines = [ax.axvline(event.xdata, color='red', linestyle='dashed') for ax in self.ax.flatten()]
         event.canvas.draw()
+
+    def analyze_plot(self):
+        messagebox.showinfo("Analysis", "The plot has been saved as 'plot.png'. You can now send it to ChatGPT for analysis.")
+
+    # def analyze_plot(self):
+    #     try:
+    #         with open("plot.png", "rb") as image_file:
+    #             encoded_image = image_file.read()
+            
+    #         response = openai.ChatCompletion.create(
+    #             model="gpt-4-vision-preview",
+    #             messages=[
+    #                 {"role": "system", "content": "You are a financial analyst. Analyze the stock trend based on the given plot."},
+    #                 {"role": "user", "content": encoded_image}
+    #             ]
+    #         )
+            
+    #         analysis = response["choices"][0]["message"]["content"]
+    #         self.analysis_label.config(text=analysis)
+    #     except Exception as e:
+    #         messagebox.showerror("Error", f"Failed to analyze plot: {e}")
 
     def on_close(self):
         self.root.destroy()
