@@ -11,7 +11,7 @@ import base64
 import hashlib
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
-import openai
+from prophet import Prophet
 
 try:
     import talib
@@ -71,7 +71,7 @@ INDICATOR_DESCRIPTIONS = {
     "ATR": "Average True Range - A volatility indicator.",
     "HT_SINE": "Hilbert Transform Sine Wave - Identifies market cycles.",
     "HT_PHASOR": "Hilbert Transform Phasor Components - Identifies phase components of cycles.",
-    "HT_TRENDMODE": "Hilbert Transform - Trend vs Cycle Mode",
+    "HT_TRENDMODE": "Hilbert Transform - Trend vs Cycle Mode.",
     "TSF": "Time Series Forecast - Forecasts the next value in a time series."
 }
 
@@ -121,17 +121,24 @@ class TaLibGUI:
         self.compute_button = ttk.Button(root, text="Compute Indicator", command=self.compute_indicator)
         self.compute_button.grid(row=2, column=2, padx=10, pady=5)
         
-        self.analysis_label = tk.Label(root, text="Analysis will appear here", wraplength=600, justify="left")
-        self.analysis_label.grid(row=2, column=3, columnspan=4, padx=10, pady=5)
+        self.prophet_var = tk.BooleanVar()
+        self.prophet_check = ttk.Checkbutton(root, text="Prophet Forecast", variable=self.prophet_var)
+        self.prophet_check.grid(row=2, column=3, padx=10, pady=5)
+        
+        # self.analysis_label = tk.Label(root, text="AI Analysis", wraplength=600, justify="left")
+        # self.analysis_label.grid(row=2, column=3, columnspan=4, padx=10, pady=5)
         
         self.stock_data = None
         self.fig, self.ax = None, None
         self.vlines = []
-        self.data_file = os.path.join(os.path.dirname(__file__), "../data/fetched_data.csv")
+        self.data_file = os.path.join(os.getcwd(), "../data/fetched_data.csv")
         print(self.data_file)
         self.populate_indicators()
     
     def fetch_stock_data(self):
+        # Create the directory if it does not exist
+        dir_path = os.path.join(os.getcwd(), "../data")
+
         if self.use_stored_var.get() and os.path.exists(self.data_file):
             self.stock_data = pd.read_csv(self.data_file, parse_dates=["timestamp"], index_col="timestamp")
             messagebox.showinfo("Success", "Loaded stored data successfully.")
@@ -147,6 +154,8 @@ class TaLibGUI:
             response = requests.get(url)
             response.raise_for_status()
             self.stock_data = pd.read_csv(StringIO(response.text), parse_dates=["timestamp"], index_col="timestamp")
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path, exist_ok=True)  # Creates directories if missing
             self.stock_data.to_csv(self.data_file)  # Store fetched data
             messagebox.showinfo("Success", f"Successfully fetched and stored data for {symbol}")
         except requests.exceptions.RequestException as e:
@@ -189,6 +198,16 @@ class TaLibGUI:
             # if indicator == "TSF":
             #     forecast_dates = [close_prices.index[-1] + pd.Timedelta(days=i) for i in range(1, 100)]
             #     forecast_values = #TODO
+            
+            if self.prophet_var.get():
+                model = Prophet()
+                df = pd.DataFrame({'ds': close_prices.index, 'y': close_prices.values})
+                model.fit(df)  # Prophet requires a DataFrame with 'ds' and 'y' columns
+
+                future = model.make_future_dataframe(periods=365)
+                forecast = model.predict(future)
+
+                figure = model.plot(forecast)
 
             self.fig, self.ax = plt.subplots(3, 2, figsize=(10, 12))
 
@@ -247,4 +266,4 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = TaLibGUI(root)
     root.mainloop()
-    exit
+    sys.exit()
