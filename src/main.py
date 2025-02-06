@@ -180,7 +180,7 @@ class TaLibGUI:
             return
 
         selected_range = TIME_RANGE_OPTIONS[self.range_var.get()]
-        filtered_data = self.stock_data if selected_range is None else self.stock_data.tail(selected_range)
+        filtered_data = self.stock_data if selected_range is None else self.stock_data.head(selected_range)
 
         try:
             close_prices = filtered_data["close"].dropna()
@@ -188,16 +188,19 @@ class TaLibGUI:
             # Convert NumPy array to Pandas Series for plotting
             plot_tags = {
                 "Close Price": filtered_data["close"].dropna(),
-                indicator: pd.Series(getattr(talib, indicator)(close_prices), index=close_prices.index),
+                indicator: pd.Series(getattr(talib, indicator)(close_prices, timeperiod=14), index=close_prices.index),
                 "Beta Coefficient": pd.Series(talib.BETA(filtered_data["high"], filtered_data["low"], timeperiod=5), index=close_prices.index),
                 "Correlation": pd.Series(talib.CORREL(filtered_data["high"], filtered_data["low"], timeperiod=5), index=close_prices.index),
                 "Standard Deviation":pd.Series(talib.STDDEV(close_prices, timeperiod=5), index=close_prices.index),
                 "Variance":pd.Series(talib.VAR(close_prices, timeperiod=5), index=close_prices.index),
             }
 
-            # if indicator == "TSF":
-            #     forecast_dates = [close_prices.index[-1] + pd.Timedelta(days=i) for i in range(1, 100)]
-            #     forecast_values = #TODO
+            if indicator == "TSF":
+                half_series = close_prices[:len(close_prices)//2]
+                # Append None values to the end of the half_series to make the total length 365
+                new_series = half_series._append(pd.Series([None] * (365 - len(half_series))), ignore_index=False)
+                # Ensure the index is aligned properly with dates
+                new_series.index = pd.date_range(start=close_prices.index.max(), periods=365, freq='D')
             
             if self.prophet_var.get():
                 model = Prophet()
@@ -217,7 +220,7 @@ class TaLibGUI:
                 ax.legend()
                 ax.grid(True)
                 # if title == "TSF":
-                #     ax.plot(forecast_dates, forecast_values, label="100-day Forecast", linestyle='dashed', color='green')
+                #     ax.plot(new_series.index, new_series, label="100-day Forecast", linestyle='dashed', color='green')
 
             plt.tight_layout()
             self.fig.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
